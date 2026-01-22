@@ -137,6 +137,23 @@ function parseContentToBlocks(content: string): Array<{ content: string }> {
     return blocks
 }
 
+// Helper function to convert Date to Logseq journalDay format (YYYYMMDD)
+function dateToJournalDay(date: Date): number {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return parseInt(`${year}${month}${day}`)
+}
+
+// Helper function to convert Logseq journalDay format (YYYYMMDD) to Date
+function journalDayToDate(journalDay: number): Date {
+    const str = journalDay.toString()
+    const year = parseInt(str.substring(0, 4))
+    const month = parseInt(str.substring(4, 6)) - 1 // Month is 0-indexed
+    const day = parseInt(str.substring(6, 8))
+    return new Date(year, month, day)
+}
+
 // Helper function to parse date range from natural language
 function parseDateRange(dateRange: string): {
     start: Date
@@ -386,10 +403,17 @@ server.tool(
             // Parse the date range
             const {start, end, title} = parseDateRange(dateRange)
 
+            // Convert start and end dates to journalDay format for comparison
+            const startJournalDay = dateToJournalDay(start)
+            const endJournalDay = dateToJournalDay(end)
+
             // Filter for journal pages within the date range
             const journalPages = pages.filter((page: any) => {
-                const pageDate = new Date(page.updatedAt)
-                return page['journal?'] === true && pageDate >= start && pageDate <= end
+                return (
+                    page['journal?'] === true &&
+                    page.journalDay >= startJournalDay &&
+                    page.journalDay <= endJournalDay
+                )
             })
 
             // Sort by date
@@ -1321,10 +1345,13 @@ server.tool(
             }
 
             // Filter journal pages within timeframe
+            // Convert start and end dates to journalDay format for comparison
+            const startJournalDay = dateToJournalDay(startDate)
+            const endJournalDay = dateToJournalDay(now)
+
             const journalPages = pages.filter((page: any) => {
                 if (!page['journal?']) return false
-                const pageDate = new Date(page.journalDay)
-                return pageDate >= startDate && pageDate <= now
+                return page.journalDay >= startJournalDay && page.journalDay <= endJournalDay
             })
 
             // Sort by date
@@ -1352,7 +1379,7 @@ server.tool(
                 const content = await getPageContent(page.name)
                 if (!content) continue
 
-                const date = new Date(page.journalDay).toISOString().split('T')[0]
+                const date = journalDayToDate(page.journalDay).toISOString().split('T')[0]
                 topicsByDate[date] = new Set()
 
                 const processBlocks = (blocks: any[]) => {
